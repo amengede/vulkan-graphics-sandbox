@@ -129,6 +129,313 @@ void Engine::clear_screen_avx2(float r, float g, float b) {
 	
 }
 
+void Engine::draw_horizontal_line(float r, float g, float b, int x1, int x2, int y) {
+
+	vkUtil::SwapChainFrame& _frame = swapchainFrames[frameNumber];
+
+	unsigned char* color = convert_color(r, g, b);
+
+	x1 = std::min(_frame.width - 1, std::max(0, x1));
+	x2 = std::min(_frame.width - 1, std::max(0, x2));
+	y = std::min(_frame.height - 1, std::max(0, y));
+
+	for (int x = x1; x < x2; ++x) {
+		int pixel = 4 * (_frame.width * y + x);
+		_frame.colorBufferData[pixel] = color[0];
+		_frame.colorBufferData[pixel + 1] = color[1];
+		_frame.colorBufferData[pixel + 2] = color[2];
+		_frame.colorBufferData[pixel + 3] = color[3];
+	}
+}
+
+void Engine::draw_horizontal_line_avx2(float r, float g, float b, int x1, int x2, int y) {
+
+	if ((x2 - x1) < 16) {
+		draw_horizontal_line(r, g, b, x1, x2, y);
+		return;
+	}
+
+	vkUtil::SwapChainFrame& _frame = swapchainFrames[frameNumber];
+
+	unsigned char* color = convert_color(r, g, b);
+
+	x1 = std::min(_frame.width - 1, std::max(0, x1));
+	x2 = std::min(_frame.width - 1, std::max(0, x2));
+	y = std::min(_frame.height - 1, std::max(0, y));
+
+	__m256 block = _mm256_set1_ps(*(float*)color);
+
+	int startPixel = _frame.width * y + x1;
+	int startBlock = (startPixel / 8) + 1;
+	int endPixel = _frame.width * y + x2;
+	int endBlock = (endPixel / 8) - 1;
+
+	__m256* blocks = (__m256*) _frame.colorBufferData.data();
+
+	for (int pixel = startPixel; pixel < startBlock * 8; ++pixel) {
+		_frame.colorBufferData[4 * pixel] = color[0];
+		_frame.colorBufferData[4 * pixel + 1] = color[1];
+		_frame.colorBufferData[4 * pixel + 2] = color[2];
+		_frame.colorBufferData[4 * pixel + 3] = color[3];
+	}
+
+	for (int i = startBlock; i < endBlock; ++i) {
+		blocks[i] = block;
+	}
+
+	for (int pixel = endBlock * 8; pixel < endPixel; ++pixel) {
+		_frame.colorBufferData[4 * pixel] = color[0];
+		_frame.colorBufferData[4 * pixel + 1] = color[1];
+		_frame.colorBufferData[4 * pixel + 2] = color[2];
+		_frame.colorBufferData[4 * pixel + 3] = color[3];
+	}
+}
+
+void Engine::draw_vertical_line(float r, float g, float b, int x, int y1, int y2) {
+
+	vkUtil::SwapChainFrame& _frame = swapchainFrames[frameNumber];
+
+	unsigned char* color = convert_color(r, g, b);
+
+	x = std::min(_frame.width - 1, std::max(0, x));
+	y1 = std::min(_frame.height - 1, std::max(0, y1));
+	y2 = std::min(_frame.height - 1, std::max(0, y2));
+
+	for (int y = y1; y < y2; ++y) {
+		int pixel = 4 * (_frame.width * y + x);
+		_frame.colorBufferData[pixel] = color[0];
+		_frame.colorBufferData[pixel + 1] = color[1];
+		_frame.colorBufferData[pixel + 2] = color[2];
+		_frame.colorBufferData[pixel + 3] = color[3];
+	}
+}
+
+void Engine::draw_line_naive(float r, float g, float b, int x1, int y1, int x2, int y2) {
+
+	if (x1 == x2) {
+		if (y1 < y2) {
+			draw_vertical_line(r, g, b, x1, y1, y2);
+		}
+		else {
+			draw_vertical_line(r, g, b, x1, y2, y1);
+		}
+		return;
+	}
+
+	if (y1 == y2) {
+		if (x1 < x2) {
+			draw_horizontal_line_avx2(r, g, b, x1, x2, y1);
+		}
+		else {
+			draw_horizontal_line_avx2(r, g, b, x2, x1, y1);
+		}
+		return;
+	}
+
+	if (abs(y2 - y1) < abs(x2 - x1)) {
+		if (x1 < x2) {
+			draw_shallow_line_naive(r, g, b, x1, y1, x2, y2);
+		}
+		else {
+			draw_shallow_line_naive(r, g, b, x2, y2, x1, y1);
+		}
+		return;
+	}
+
+	if (y1 < y2) {
+		draw_steep_line_naive(r, g, b, x1, y1, x2, y2);
+	}
+	else {
+		draw_steep_line_naive(r, g, b, x2, y2, x1, y1);
+	}
+}
+
+void Engine::draw_shallow_line_naive(float r, float g, float b, int x1, int y1, int x2, int y2) {
+
+	vkUtil::SwapChainFrame& _frame = swapchainFrames[frameNumber];
+
+	unsigned char* color = convert_color(r, g, b);
+
+	float dydx = (float)(y2 - y1) / (x2 - x1);
+
+	x1 = std::min(_frame.width - 1, std::max(0, x1));
+	x2 = std::min(_frame.width - 1, std::max(0, x2));
+	y1 = std::min(_frame.height - 1, std::max(0, y1));
+	y2 = std::min(_frame.height - 1, std::max(0, y2));
+
+	float y = y1;
+	int screen_y, pixel;
+	for (int x = x1; x < x2; ++x) {
+
+		screen_y = (int)y;
+		pixel = 4 * (_frame.width * screen_y + x);
+		_frame.colorBufferData[pixel] = color[0];
+		_frame.colorBufferData[pixel + 1] = color[1];
+		_frame.colorBufferData[pixel + 2] = color[2];
+		_frame.colorBufferData[pixel + 3] = color[3];
+
+		y += dydx;
+	}
+
+}
+
+void Engine::draw_steep_line_naive(float r, float g, float b, int x1, int y1, int x2, int y2) {
+
+	vkUtil::SwapChainFrame& _frame = swapchainFrames[frameNumber];
+
+	unsigned char* color = convert_color(r, g, b);
+
+	float dxdy = (float)(x2 - x1) / (y2 - y1);
+
+	x1 = std::min(_frame.width - 1, std::max(0, x1));
+	x2 = std::min(_frame.width - 1, std::max(0, x2));
+	y1 = std::min(_frame.height - 1, std::max(0, y1));
+	y2 = std::min(_frame.height - 1, std::max(0, y2));
+
+	float x = x1;
+	int screen_x, pixel;
+	for (int y = y1; y < y2; ++y) {
+
+		screen_x = (int)x;
+		pixel = 4 * (_frame.width * y + screen_x);
+		_frame.colorBufferData[pixel] = color[0];
+		_frame.colorBufferData[pixel + 1] = color[1];
+		_frame.colorBufferData[pixel + 2] = color[2];
+		_frame.colorBufferData[pixel + 3] = color[3];
+
+		x += dxdy;
+	}
+
+}
+
+void Engine::draw_line_bresenham(float r, float g, float b, int x1, int y1, int x2, int y2) {
+
+	if (x1 == x2) {
+		if (y1 < y2) {
+			draw_vertical_line(r, g, b, x1, y1, y2);
+		}
+		else {
+			draw_vertical_line(r, g, b, x1, y2, y1);
+		}
+		return;
+	}
+
+	if (y1 == y2) {
+		if (x1 < x2) {
+			draw_horizontal_line_avx2(r, g, b, x1, x2, y1);
+		}
+		else {
+			draw_horizontal_line_avx2(r, g, b, x2, x1, y1);
+		}
+		return;
+	}
+
+	if (abs(y2 - y1) < abs(x2 - x1)) {
+		if (x1 < x2) {
+			draw_shallow_line_bresenham(r, g, b, x1, y1, x2, y2);
+		}
+		else {
+			draw_shallow_line_bresenham(r, g, b, x2, y2, x1, y1);
+		}
+		return;
+	}
+
+	if (y1 < y2) {
+		draw_steep_line_bresenham(r, g, b, x1, y1, x2, y2);
+	}
+	else {
+		draw_steep_line_bresenham(r, g, b, x2, y2, x1, y1);
+	}
+}
+
+void Engine::draw_shallow_line_bresenham(float r, float g, float b, int x1, int y1, int x2, int y2) {
+
+	vkUtil::SwapChainFrame& _frame = swapchainFrames[frameNumber];
+
+	unsigned char* color = convert_color(r, g, b);
+
+	x1 = std::min(_frame.width - 1, std::max(0, x1));
+	x2 = std::min(_frame.width - 1, std::max(0, x2));
+	y1 = std::min(_frame.height - 1, std::max(0, y1));
+	y2 = std::min(_frame.height - 1, std::max(0, y2));
+
+	int dx = x2 - x1;
+	int dy = y2 - y1;
+	int yInc = 1;
+	if (dy < 0) {
+		yInc = -1;
+		dy *= -1;
+	}
+
+	int D = 2 * dy - dx;
+	int dDInc = 2 * (dy - dx);
+	int dDNoInc = 2 * dy;
+
+	int pixel;
+	int y = y1;
+	for (int x = x1; x < x2; ++x) {
+
+		pixel = 4 * (_frame.width * y + x);
+		_frame.colorBufferData[pixel] = color[0];
+		_frame.colorBufferData[pixel + 1] = color[1];
+		_frame.colorBufferData[pixel + 2] = color[2];
+		_frame.colorBufferData[pixel + 3] = color[3];
+
+		if (D > 0) {
+			y += yInc;
+			D += dDInc;
+		}
+		else {
+			D += dDNoInc;
+		}
+	}
+
+}
+
+void Engine::draw_steep_line_bresenham(float r, float g, float b, int x1, int y1, int x2, int y2) {
+
+	vkUtil::SwapChainFrame& _frame = swapchainFrames[frameNumber];
+
+	unsigned char* color = convert_color(r, g, b);
+
+	x1 = std::min(_frame.width - 1, std::max(0, x1));
+	x2 = std::min(_frame.width - 1, std::max(0, x2));
+	y1 = std::min(_frame.height - 1, std::max(0, y1));
+	y2 = std::min(_frame.height - 1, std::max(0, y2));
+
+	int dx = x2 - x1;
+	int dy = y2 - y1;
+	int xInc = 1;
+	if (dx < 0) {
+		xInc = -1;
+		dx *= -1;
+	}
+
+	int D = 2 * dx - dy;
+	int dDInc = 2 * (dx - dy);
+	int dDNoInc = 2 * dx;
+
+	int pixel;
+	int x = x1;
+	for (int y = y1; y < y2; ++y) {
+
+		pixel = 4 * (_frame.width * y + x);
+		_frame.colorBufferData[pixel] = color[0];
+		_frame.colorBufferData[pixel + 1] = color[1];
+		_frame.colorBufferData[pixel + 2] = color[2];
+		_frame.colorBufferData[pixel + 3] = color[3];
+
+		if (D > 0) {
+			x += xInc;
+			D += dDInc;
+		}
+		else {
+			D += dDNoInc;
+		}
+	}
+
+}
+
 /**
 * The swapchain must be recreated upon resize or minimization, among other cases
 */

@@ -15,6 +15,24 @@ public:
 
 	void clear_screen_avx2(float r, float g, float b);
 
+	void draw_horizontal_line(float r, float g, float b, int x1, int x2, int y);
+
+	void draw_horizontal_line_avx2(float r, float g, float b, int x1, int x2, int y);
+
+	void draw_vertical_line(float r, float g, float b, int x, int y1, int y2);
+
+	void draw_line_naive(float r, float g, float b, int x1, int y1, int x2, int y2);
+
+	void draw_shallow_line_naive(float r, float g, float b, int x1, int y1, int x2, int y2);
+
+	void draw_steep_line_naive(float r, float g, float b, int x1, int y1, int x2, int y2);
+
+	void draw_line_bresenham(float r, float g, float b, int x1, int y1, int x2, int y2);
+
+	void draw_shallow_line_bresenham(float r, float g, float b, int x1, int y1, int x2, int y2);
+
+	void draw_steep_line_bresenham(float r, float g, float b, int x1, int y1, int x2, int y2);
+
 	void render();
 
 private:
