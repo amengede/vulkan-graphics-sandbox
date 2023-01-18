@@ -62,7 +62,8 @@ void App::run() {
 		//graphicsEngine->clear_screen(0.0, 0.0, 0.0);
 		graphicsEngine->clear_screen_avx2(0.0, 0.0, 0.0);
 		//lines_test();
-		projection_test();
+		//projection_test();
+		backface_test();
 		graphicsEngine->render();
 
 		calculateFrameRate();
@@ -202,6 +203,97 @@ void App::projection_test() {
 			transformedVertices[edge_a[i]].data[0], transformedVertices[edge_a[i]].data[1],
 			transformedVertices[edge_b[i]].data[0], transformedVertices[edge_b[i]].data[1]
 		);
+	}
+
+	logged = true;
+}
+
+void App::backface_test() {
+	const int pointCount = 8;
+	vec4 vertices[pointCount] = {
+		{ 0.75f,  0.75f,  0.75f, 1.0f}, //0
+		{-0.75f,  0.75f,  0.75f, 1.0f}, //1
+		{-0.75f, -0.75f,  0.75f, 1.0f}, //2
+		{ 0.75f, -0.75f,  0.75f, 1.0f}, //3
+
+		{-0.75f,  0.75f, -0.75f, 1.0f}, //4
+		{ 0.75f,  0.75f, -0.75f, 1.0f}, //5
+		{ 0.75f, -0.75f, -0.75f, 1.0f}, //6
+		{-0.75f, -0.75f, -0.75f, 1.0f}, //7
+	};
+	vec4 transformedVertices[pointCount];
+
+	const int planeCount = 6;
+	int plane_vertices[planeCount][4] = {
+		{0, 1, 2, 3}, //front
+		{1, 0, 5, 4}, //top
+		{3, 6, 5, 0}, //right
+		{7, 6, 3, 2}, //bottom
+		{1, 4, 7, 2}, //left
+		{4, 5, 6, 7}  //back
+	};
+
+	theta += 0.1f * frameTime / 16.6f;
+	if (theta > 360) {
+		theta -= 360;
+	}
+	mat4 model = linalgMakeZRotation(theta);
+	model = linalgMulMat4Mat4(model, linalgMakeXRotation(2 * theta));
+	model = linalgMulMat4Mat4(model, linalgMakeYRotation(3 * theta));
+	model = linalgMulMat4Mat4(model, linalgMakeTranslation(linalgMakeVec3(0.0f, 0.0f, -5.0f)));
+	mat4 projection = linalgMakePerspectiveProjection(45.0f, (float)640 / 480, 0.1f, 10.0f);
+	mat4 finalTransform = linalgMulMat4Mat4(model, projection);
+	for (int i = 0; i < pointCount; ++i) {
+		transformedVertices[i] = linalgMulMat4Vec4(finalTransform, vertices[i]);
+		transformedVertices[i].data[0] = transformedVertices[i].data[0] / transformedVertices[i].data[3];
+		transformedVertices[i].data[1] = transformedVertices[i].data[1] / transformedVertices[i].data[3];
+		transformedVertices[i].data[2] = transformedVertices[i].data[2] / transformedVertices[i].data[3];
+	}
+
+	for (int i = 0; i < pointCount; ++i) {
+		transformedVertices[i].data[0] = 320 + 320 * transformedVertices[i].data[0];
+		transformedVertices[i].data[1] = 240 - 240 * transformedVertices[i].data[1];
+	}
+
+	for (int i = 0; i < planeCount; ++i) {
+
+		vec4 vertex_a = transformedVertices[plane_vertices[i][0]];
+		vec4 vertex_b = transformedVertices[plane_vertices[i][1]];
+		vec4 vertex_c = transformedVertices[plane_vertices[i][2]];
+
+		vec3 tangent = {
+			vertex_b.data[0] - vertex_a.data[0],
+			vertex_b.data[1] - vertex_a.data[1],
+			vertex_b.data[2] - vertex_a.data[2],
+			0.0f
+		};
+
+		vec3 bitangent = {
+			vertex_c.data[0] - vertex_a.data[0],
+			vertex_c.data[1] - vertex_a.data[1],
+			vertex_c.data[2] - vertex_a.data[2],
+			0.0f
+		};
+
+		vec3 normal = linalgCross(tangent, bitangent);
+
+		if (normal.data[2] > 0) {
+			continue;
+		}
+
+		for (int j = 0; j < 4; ++j) {
+
+			int x_a = (int)transformedVertices[plane_vertices[i][j]].data[0];
+			int y_a = (int)transformedVertices[plane_vertices[i][j]].data[1];
+
+			int x_b = (int)transformedVertices[plane_vertices[i][(j + 1) % 4]].data[0];
+			int y_b = (int)transformedVertices[plane_vertices[i][(j + 1) % 4]].data[1];
+			graphicsEngine->draw_line_bresenham(
+				1.0f, 1.0f, 1.0f,
+				x_a, y_a,
+				x_b, y_b
+			);
+		}
 	}
 
 	logged = true;

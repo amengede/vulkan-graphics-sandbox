@@ -19,6 +19,7 @@ private:
 	double renderTimeA = 0.0, renderTimeB = 0.0;
 	int trialCount = 0;
 	bool logged = false;
+	float theta = 0.0f;
 
 public:
 	App(int width, int height, bool debug);
@@ -27,4 +28,5 @@ public:
 
 	void lines_test();
 	void projection_test();
+	void backface_test();
 };
