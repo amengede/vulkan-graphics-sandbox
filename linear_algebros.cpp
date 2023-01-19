@@ -1,6 +1,108 @@
 ﻿#include "linear_algebros.h"
 #include <math.h>
 
+frustrum linalgMakeViewFrustrum(float fovy, float aspect, float near, float far) {
+	frustrum f;
+	float ytop = fabsf(near) * tanf(linalgDeg2Rad(fovy / 2));
+	float xright = ytop * aspect;
+
+	//near
+	vec3 p0 = linalgMakeVec3(0, 0, near);
+	vec3 n = linalgMakeVec3(0, 0, -1);
+	f.planes[0] = linalgMakePlane(p0, n);
+
+	//far
+	p0 = linalgMakeVec3(0, 0, far);
+	n = linalgMakeVec3(0, 0, 1);
+	f.planes[1] = linalgMakePlane(p0, n);
+
+	//top
+	p0 = linalgMakeVec3(0, ytop, near);
+	n = linalgMakeVec3(0, near / ytop, -1);
+	f.planes[2] = linalgMakePlane(p0, n);
+
+	//bottom
+	p0 = linalgMakeVec3(0, -ytop, near);
+	n = linalgMakeVec3(0, -near / ytop, -1);
+	f.planes[3] = linalgMakePlane(p0, n);
+
+	//left
+	p0 = linalgMakeVec3(-xright, 0, near);
+	n = linalgMakeVec3(-near / xright, 0, -1);
+	f.planes[4] = linalgMakePlane(p0, n);
+
+	//right
+	p0 = linalgMakeVec3(xright, 0, near);
+	n = linalgMakeVec3(near / xright, 0, -1);
+	f.planes[5] = linalgMakePlane(p0, n);
+
+	return f;
+}
+
+edgeTable linalgFrustrumClipSimple(edgeTable input, frustrum f) {
+
+	for (int i = 0; i < 6; ++i) {
+		input = linalgClipAgainstBoundary(input, f.planes[i]);
+	}
+
+	return input;
+}
+
+plane linalgMakePlane(vec3 p0, vec3 n) {
+
+	n = linalgNormalizeVec3(n);
+
+	plane p;
+	p.A = n.data[0];
+	p.B = n.data[1];
+	p.C = n.data[2];
+
+	p.D = -linalgDotVec3(p0, n);
+
+	return p;
+}
+
+bool linalgPointBehindPlane(vec4 v, plane p) {
+	return p.A * v.data[0] + p.B * v.data[1] + p.C * v.data[2] + p.D < 0;
+}
+
+float linalgEdgePlaneIntersectionPoint(vec4 a, vec4 b, plane p) {
+	return -(a.data[0] * p.A + a.data[1] * p.B + a.data[2] * p.C + p.D) /
+		(p.A * (b.data[0] - a.data[0]) + p.B * (b.data[1] - a.data[1]) + p.C * (b.data[2] - a.data[2]));
+}
+
+edgeTable linalgClipAgainstBoundary(edgeTable input, plane p) {
+
+	edgeTable output;
+	output.vertices = (vec4*)malloc(2 * input.vertexCount * sizeof(vec4));
+	output.vertexCount = 0;
+
+	for (int i = 0; i < input.vertexCount; ++i) {
+		vec4 a = input.vertices[i];
+		vec4 b = input.vertices[(i + 1) % input.vertexCount];
+		vec4 c;
+		float t = linalgEdgePlaneIntersectionPoint(a, b, p);
+		c.vector = _mm_fmadd_ps(
+			_mm_set1_ps(t),
+			_mm_sub_ps(b.vector, a.vector),
+			a.vector
+		);
+
+		if (!linalgPointBehindPlane(b, p)) { //if b inside of boundary
+			if (linalgPointBehindPlane(a, p)) { // if a outside of boundary
+				output.vertices[output.vertexCount++] = c;
+			}
+			output.vertices[output.vertexCount++] = b;
+		}
+		else if (!linalgPointBehindPlane(a, p)) { //if a is visible
+			output.vertices[output.vertexCount++] = c;
+		}
+	}
+
+	free(input.vertices);
+	return output;
+}
+
 /*-------- Conversions        ----------*/
 
 float linalgDeg2Rad(float angle) {

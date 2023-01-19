@@ -34,6 +34,31 @@ typedef struct quaternion {
 	};
 } quat;
 
+typedef struct {
+	vec4* vertices;
+	int vertexCount;
+} edgeTable;
+
+typedef struct {
+	float A, B, C, D;
+} plane;
+
+typedef struct {
+	plane planes[6];
+} frustrum;
+
+plane linalgMakePlane(vec3 p0, vec3 n);
+
+bool linalgPointBehindPlane(vec4 v, plane p);
+
+float linalgEdgePlaneIntersectionPoint(vec4 a, vec4 b, plane p);
+
+edgeTable linalgFrustrumClipSimple(edgeTable input, frustrum f);
+
+edgeTable linalgClipAgainstBoundary(edgeTable input, plane p);
+
+frustrum linalgMakeViewFrustrum(float fovy, float aspect, float near, float far);
+
 /*-------- Conversions        ----------*/
 
 #define pi 3.14159265359f

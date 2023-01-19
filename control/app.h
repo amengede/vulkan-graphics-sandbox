@@ -29,4 +29,5 @@ public:
 	void lines_test();
 	void projection_test();
 	void backface_test();
+	void clipping_test();
 };

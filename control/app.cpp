@@ -63,7 +63,8 @@ void App::run() {
 		graphicsEngine->clear_screen_avx2(0.0, 0.0, 0.0);
 		//lines_test();
 		//projection_test();
-		backface_test();
+		//backface_test();
+		clipping_test();
 		graphicsEngine->render();
 
 		calculateFrameRate();
@@ -294,6 +295,119 @@ void App::backface_test() {
 				x_b, y_b
 			);
 		}
+	}
+
+	logged = true;
+}
+
+void App::clipping_test() {
+	const int pointCount = 8;
+	vec4 vertices[pointCount] = {
+		{ 0.75f,  0.75f,  0.75f, 1.0f}, //0
+		{-0.75f,  0.75f,  0.75f, 1.0f}, //1
+		{-0.75f, -0.75f,  0.75f, 1.0f}, //2
+		{ 0.75f, -0.75f,  0.75f, 1.0f}, //3
+
+		{-0.75f,  0.75f, -0.75f, 1.0f}, //4
+		{ 0.75f,  0.75f, -0.75f, 1.0f}, //5
+		{ 0.75f, -0.75f, -0.75f, 1.0f}, //6
+		{-0.75f, -0.75f, -0.75f, 1.0f}, //7
+	};
+	vec4 transformedVertices[pointCount];
+
+	const int planeCount = 6;
+	int plane_vertices[planeCount][4] = {
+		{0, 1, 2, 3}, //front
+		{1, 0, 5, 4}, //top
+		{3, 6, 5, 0}, //right
+		{7, 6, 3, 2}, //bottom
+		{1, 4, 7, 2}, //left
+		{4, 5, 6, 7}  //back
+	};
+
+	theta += 0.1f * frameTime / 16.6f;
+	if (theta > 360) {
+		theta -= 360;
+	}
+	mat4 model = linalgMakeZRotation(theta);
+	model = linalgMulMat4Mat4(model, linalgMakeXRotation(2 * theta));
+	model = linalgMulMat4Mat4(model, linalgMakeYRotation(3 * theta));
+	model = linalgMulMat4Mat4(model, linalgMakeTranslation(linalgMakeVec3(0.0f, 2.0f, -5.0f)));
+
+	float fovy = 45.0f;
+	float aspect = (float)640 / 480;
+	float near = 0.1f;
+	float far = 10.0f;
+	mat4 projection = linalgMakePerspectiveProjection(fovy, aspect, near, far);
+	frustrum viewFrustrum = linalgMakeViewFrustrum(fovy, aspect, -near, -far);
+
+	for (int i = 0; i < pointCount; ++i) {
+		transformedVertices[i] = linalgMulMat4Vec4(model, vertices[i]);
+	}
+
+	for (int i = 0; i < planeCount; ++i) {
+
+		vec4 vertex_a = transformedVertices[plane_vertices[i][0]];
+		vec4 vertex_b = transformedVertices[plane_vertices[i][1]];
+		vec4 vertex_c = transformedVertices[plane_vertices[i][2]];
+
+		vec3 tangent = {
+			vertex_b.data[0] - vertex_a.data[0],
+			vertex_b.data[1] - vertex_a.data[1],
+			vertex_b.data[2] - vertex_a.data[2],
+			0.0f
+		};
+
+		vec3 bitangent = {
+			vertex_c.data[0] - vertex_a.data[0],
+			vertex_c.data[1] - vertex_a.data[1],
+			vertex_c.data[2] - vertex_a.data[2],
+			0.0f
+		};
+
+		vec3 normal = linalgCross(tangent, bitangent);
+		vec3 fragmentToViewer = linalgMakeVec3(
+			-vertex_a.data[0],
+			-vertex_a.data[1],
+			-vertex_a.data[2]
+		);
+
+		if (linalgDotVec3(normal, fragmentToViewer) < 0) {
+			continue;
+		}
+
+		edgeTable edges;
+		edges.vertexCount = 4;
+		edges.vertices = (vec4*)malloc(4 * sizeof(vec4));
+		for (int j = 0; j < 4; ++j) {
+			edges.vertices[j] = transformedVertices[plane_vertices[i][j]];
+		}
+		
+		edges = linalgFrustrumClipSimple(edges, viewFrustrum);
+
+		for (int j = 0; j < edges.vertexCount; ++j) {
+
+			vec4 point_a = linalgMulMat4Vec4(projection, edges.vertices[j]);
+			point_a.data[0] = point_a.data[0] / point_a.data[3];
+			point_a.data[1] = point_a.data[1] / point_a.data[3];
+
+			vec4 point_b = linalgMulMat4Vec4(projection, edges.vertices[(j + 1) % edges.vertexCount]);
+			point_b.data[0] = point_b.data[0] / point_b.data[3];
+			point_b.data[1] = point_b.data[1] / point_b.data[3];
+
+			int x_a = (int)(320 + 320 * point_a.data[0]);
+			int y_a = (int)(240 - 240 * point_a.data[1]);
+			int x_b = (int)(320 + 320 * point_b.data[0]);
+			int y_b = (int)(240 - 240 * point_b.data[1]);
+
+			graphicsEngine->draw_line_bresenham(
+				1.0f, 1.0f, 1.0f,
+				x_a, y_a,
+				x_b, y_b
+			);
+		}
+
+		free(edges.vertices);
 	}
 
 	logged = true;
