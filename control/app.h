@@ -30,4 +30,5 @@ public:
 	void projection_test();
 	void backface_test();
 	void clipping_test();
+	void flat_shading_test();
 };

@@ -436,6 +436,132 @@ void Engine::draw_steep_line_bresenham(float r, float g, float b, int x1, int y1
 
 }
 
+void Engine::draw_polygon_flat(float r, float g, float b, edgeTable polygon) {
+
+	int x_start[480];
+	int x_end[480];
+	int y_min = 480;
+	int y_max = 0;
+
+	for (int i = 0; i < polygon.vertexCount; ++i) {
+
+		vec4 vertex = polygon.vertices[i];
+
+		if (vertex.data[1] < y_min) {
+			y_min = std::max(0, (int)vertex.data[1]);
+		}
+
+		if (vertex.data[1] > y_max) {
+			y_max = std::min(479, (int)vertex.data[1]);
+		}
+	}
+
+	for (int y = y_min; y <= y_max; ++y) {
+		x_start[y] = 640;
+		x_end[y] = 0;
+	}
+
+	for (int j = 0; j < polygon.vertexCount; ++j) {
+		int x1 = (int)polygon.vertices[j].data[0];
+		int y1 = (int)polygon.vertices[j].data[1];
+		int x2 = (int)polygon.vertices[(j + 1) % polygon.vertexCount].data[0];
+		int y2 = (int)polygon.vertices[(j + 1) % polygon.vertexCount].data[1];
+
+		if (abs(x2 - x1) < abs(y2 - y1)) {
+			if (y1 < y2) {
+				trace_steep_edge(x1, y1, x2, y2, x_start, x_end);
+			}
+			else {
+				trace_steep_edge(x2, y2, x1, y1, x_start, x_end);
+			}
+		}
+		else {
+			if (x1 < x2) {
+				trace_shallow_edge(x1, y1, x2, y2, x_start, x_end);
+			}
+			else {
+				trace_shallow_edge(x2, y2, x1, y1, x_start, x_end);
+			}
+		}
+	}
+
+	for (int y = y_min; y <= y_max; ++y) {
+		draw_horizontal_line_avx2(r, g, b, x_start[y], x_end[y], y);
+	}
+}
+
+void Engine:: trace_shallow_edge(int x1, int y1, int x2, int y2, int* x_start, int* x_end) {
+
+	int dx = x2 - x1;
+	int dy = y2 - y1;
+	int yInc = 1;
+	if (dy < 0) {
+		yInc = -1;
+		dy *= -1;
+	}
+
+	int D = 2 * dy - dx;
+	int dDInc = 2 * (dy - dx);
+	int dDNoInc = 2 * dy;
+
+	int pixel;
+	int y = y1;
+	for (int x = x1; x <= x2; ++x) {
+
+		if (x < x_start[y] && y > 0 && y < 479) {
+			x_start[y] = x;
+		}
+
+		if (x > x_end[y] && y > 0 && y < 479) {
+			x_end[y] = x;
+		}
+
+		if (D > 0) {
+			y += yInc;
+			D += dDInc;
+		}
+		else {
+			D += dDNoInc;
+		}
+	}
+}
+
+void Engine::trace_steep_edge(int x1, int y1, int x2, int y2, int* x_start, int* x_end) {
+
+	int dx = x2 - x1;
+	int dy = y2 - y1;
+	int xInc = 1;
+	if (dx < 0) {
+		xInc = -1;
+		dx *= -1;
+	}
+
+	int D = 2 * dx - dy;
+	int dDInc = 2 * (dx - dy);
+	int dDNoInc = 2 * dx;
+
+	int pixel;
+	int x = x1;
+	for (int y = y1; y < y2; ++y) {
+
+		if (x < x_start[y] && y > 0 && y < 479) {
+			x_start[y] = x;
+		}
+
+		if (x > x_end[y] && y > 0 && y < 479) {
+			x_end[y] = x;
+		}
+
+		if (D > 0) {
+			x += xInc;
+			D += dDInc;
+		}
+		else {
+			D += dDNoInc;
+		}
+	}
+}
+
 /**
 * The swapchain must be recreated upon resize or minimization, among other cases
 */

@@ -2,6 +2,7 @@
 #include "../config.h"
 #include "vkUtil/frame.h"
 #include "vkImage/image.h"
+#include "../linear_algebros.h"
 
 class Engine {
 
@@ -32,6 +33,12 @@ public:
 	void draw_shallow_line_bresenham(float r, float g, float b, int x1, int y1, int x2, int y2);
 
 	void draw_steep_line_bresenham(float r, float g, float b, int x1, int y1, int x2, int y2);
+
+	void draw_polygon_flat(float r, float g, float b, edgeTable polygon);
+
+	void trace_shallow_edge(int x1, int y1, int x2, int y2, int* x_start, int* x_end);
+
+	void trace_steep_edge(int x1, int y1, int x2, int y2, int* x_start, int* x_end);
 
 	void render();
 
