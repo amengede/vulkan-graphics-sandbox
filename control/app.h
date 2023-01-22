@@ -31,4 +31,5 @@ public:
 	void backface_test();
 	void clipping_test();
 	void flat_shading_test();
+	void color_blending_test();
 };

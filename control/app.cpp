@@ -65,7 +65,8 @@ void App::run() {
 		//projection_test();
 		//backface_test();
 		//clipping_test();
-		flat_shading_test();
+		//flat_shading_test();
+		color_blending_test();
 		graphicsEngine->render();
 
 		calculateFrameRate();
@@ -520,6 +521,135 @@ void App::flat_shading_test() {
 		);
 
 		free(edges.vertices);
+	}
+
+	logged = true;
+}
+
+void App::color_blending_test() {
+	const int pointCount = 8;
+	vec4 vertices[pointCount] = {
+		{ 0.75f,  0.75f,  0.75f, 1.0f}, //0
+		{-0.75f,  0.75f,  0.75f, 1.0f}, //1
+		{-0.75f, -0.75f,  0.75f, 1.0f}, //2
+		{ 0.75f, -0.75f,  0.75f, 1.0f}, //3
+
+		{-0.75f,  0.75f, -0.75f, 1.0f}, //4
+		{ 0.75f,  0.75f, -0.75f, 1.0f}, //5
+		{ 0.75f, -0.75f, -0.75f, 1.0f}, //6
+		{-0.75f, -0.75f, -0.75f, 1.0f}, //7
+	};
+
+	payload attributes[pointCount] = {
+		{0.5f, 0.5f, 0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f},
+		{1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f},
+		{0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f},
+		{1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f},
+
+		{0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f},
+		{1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f},
+		{0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f},
+		{1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f},
+	};
+
+	vec4 transformedVertices[pointCount];
+
+	const int planeCount = 6;
+	int plane_vertices[planeCount][4] = {
+		{0, 1, 2, 3}, //front
+		{1, 0, 5, 4}, //top
+		{3, 6, 5, 0}, //right
+		{7, 6, 3, 2}, //bottom
+		{1, 4, 7, 2}, //left
+		{4, 5, 6, 7}  //back
+	};
+
+	theta += 0.1f * frameTime / 16.6f;
+	if (theta > 360) {
+		theta -= 360;
+	}
+	mat4 model = linalgMakeZRotation(theta);
+	model = linalgMulMat4Mat4(model, linalgMakeXRotation(2 * theta));
+	model = linalgMulMat4Mat4(model, linalgMakeYRotation(3 * theta));
+	model = linalgMulMat4Mat4(model, linalgMakeTranslation(linalgMakeVec3(0.0f, 0.0f, -5.0f)));
+
+	float fovy = 45.0f;
+	float aspect = (float)640 / 480;
+	float near = 0.1f;
+	float far = 10.0f;
+	mat4 projection = linalgMakePerspectiveProjection(fovy, aspect, near, far);
+	frustrum viewFrustrum = linalgMakeViewFrustrum(fovy, aspect, -near, -far);
+
+	for (int i = 0; i < pointCount; ++i) {
+		transformedVertices[i] = linalgMulMat4Vec4(model, vertices[i]);
+	}
+
+	for (int i = 0; i < planeCount; ++i) {
+
+		vec4 vertex_a = transformedVertices[plane_vertices[i][0]];
+		vec4 vertex_b = transformedVertices[plane_vertices[i][1]];
+		vec4 vertex_c = transformedVertices[plane_vertices[i][2]];
+
+		vec3 tangent = {
+			vertex_b.data[0] - vertex_a.data[0],
+			vertex_b.data[1] - vertex_a.data[1],
+			vertex_b.data[2] - vertex_a.data[2],
+			0.0f
+		};
+
+		vec3 bitangent = {
+			vertex_c.data[0] - vertex_a.data[0],
+			vertex_c.data[1] - vertex_a.data[1],
+			vertex_c.data[2] - vertex_a.data[2],
+			0.0f
+		};
+
+		vec3 normal = linalgNormalizeVec3(linalgCross(tangent, bitangent));
+		vec3 fragmentToViewer = linalgMakeVec3(
+			-vertex_a.data[0],
+			-vertex_a.data[1],
+			-vertex_a.data[2]
+		);
+
+		if (linalgDotVec3(normal, fragmentToViewer) < 0) {
+			continue;
+		}
+
+		edgeTable edges;
+		edges.vertexCount = 4;
+		edges.vertices = (vec4*)malloc(4 * sizeof(vec4));
+		edges.payloads = (payload*)malloc(4 * sizeof(payload));
+		for (int j = 0; j < 4; ++j) {
+			edges.vertices[j] = transformedVertices[plane_vertices[i][j]];
+
+			payload attribute = attributes[plane_vertices[i][j]];
+			vec3 torch = { 0.0f, 0.0f, 1.0f, 0.0f };
+			torch = linalgNormalizeVec3(torch);
+			vec3 diffuseColor = { attribute.data[0], attribute.data[1], attribute.data[2], 0.0f};
+			diffuseColor = linalgMulVec3(diffuseColor, std::max(0.0f, linalgDotVec3(normal, torch)));
+			attribute.data[0] = diffuseColor.data[0];
+			attribute.data[1] = diffuseColor.data[1];
+			attribute.data[2] = diffuseColor.data[2];
+
+			edges.payloads[j] = attribute;
+		}
+
+		edges = linalgFrustrumClip(edges, viewFrustrum);
+
+		for (int j = 0; j < edges.vertexCount; ++j) {
+
+			vec4 point = linalgMulMat4Vec4(projection, edges.vertices[j]);
+			point.data[0] = point.data[0] / point.data[3];
+			point.data[1] = point.data[1] / point.data[3];
+
+			edges.vertices[j].data[0] = (int)(320 + 320 * point.data[0]);
+			edges.vertices[j].data[1] = (int)(240 - 240 * point.data[1]);
+		}
+
+		graphicsEngine->draw_polygon_blended(edges);
+
+		free(edges.vertices);
+		free(edges.payloads);
 	}
 
 	logged = true;

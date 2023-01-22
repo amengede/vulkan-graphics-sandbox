@@ -562,6 +562,185 @@ void Engine::trace_steep_edge(int x1, int y1, int x2, int y2, int* x_start, int*
 	}
 }
 
+void Engine::draw_polygon_blended(edgeTable polygon) {
+
+	vertex* vertex_start = (vertex*)malloc(480 * sizeof(vertex));
+	vertex* vertex_end = (vertex*)malloc(480 * sizeof(vertex));
+	int y_min = 480;
+	int y_max = 0;
+
+	for (int i = 0; i < polygon.vertexCount; ++i) {
+
+		vec4 vertex = polygon.vertices[i];
+
+		if (vertex.data[1] < y_min) {
+			y_min = std::max(0, (int)vertex.data[1]);
+		}
+
+		if (vertex.data[1] > y_max) {
+			y_max = std::min(479, (int)vertex.data[1]);
+		}
+	}
+
+	for (int y = y_min; y <= y_max; ++y) {
+		vertex_start[y].x = 640;
+		vertex_end[y].x = 0;
+	}
+
+	for (int j = 0; j < polygon.vertexCount; ++j) {
+
+		vertex v1;
+		v1.x = (int)polygon.vertices[j].data[0];
+		v1.y = (int)polygon.vertices[j].data[1];
+		v1.attributes = polygon.payloads[j];
+
+		vertex v2;
+		int k = (j + 1) % polygon.vertexCount;
+		v2.x = (int)polygon.vertices[k].data[0];
+		v2.y = (int)polygon.vertices[k].data[1];
+		v2.attributes = polygon.payloads[k];
+
+		if (abs(v2.x - v1.x) < abs(v2.y - v1.y)) {
+			if (v1.y < v2.y) {
+				interpolate_steep_edge(v1, v2, vertex_start, vertex_end);
+			}
+			else {
+				interpolate_steep_edge(v2, v1, vertex_start, vertex_end);
+			}
+		}
+		else {
+			if (v1.x < v2.x) {
+				interpolate_shallow_edge(v1, v2, vertex_start, vertex_end);
+			}
+			else {
+				interpolate_shallow_edge(v2, v1, vertex_start, vertex_end);
+			}
+		}
+	}
+
+	for (int y = y_min; y <= y_max; ++y) {
+		draw_horizontal_line_blended(vertex_start[y], vertex_end[y], y);
+	}
+
+	free(vertex_start);
+	free(vertex_end);
+}
+
+void Engine::interpolate_shallow_edge(vertex v1, vertex v2, vertex* vertex_start, vertex* vertex_end) {
+
+	int dx = v2.x - v1.x;
+	int dy = v2.y - v1.y;
+	int yInc = 1;
+	if (dy < 0) {
+		yInc = -1;
+		dy *= -1;
+	}
+
+	int D = 2 * dy - dx;
+	int dDInc = 2 * (dy - dx);
+	int dDNoInc = 2 * dy;
+
+	__m256 dPdx = _mm256_div_ps(
+		_mm256_sub_ps(v2.attributes.lump, v1.attributes.lump),
+		_mm256_set1_ps(dx)
+	);
+	vertex frag = v1;
+	int y = v1.y;
+	for (int x = v1.x; x <= v2.x; ++x) {
+
+		if (x < vertex_start[y].x && y > 0 && y < 479) {
+			vertex_start[y].x = x;
+			vertex_start[y].attributes = frag.attributes;
+		}
+
+		if (x > vertex_end[y].x && y > 0 && y < 479) {
+			vertex_end[y].x = x;
+			vertex_end[y].attributes = frag.attributes;
+		}
+
+		if (D > 0) {
+			y += yInc;
+			D += dDInc;
+		}
+		else {
+			D += dDNoInc;
+		}
+
+		frag.attributes.lump = _mm256_add_ps(frag.attributes.lump, dPdx);
+	}
+
+}
+
+void Engine::interpolate_steep_edge(vertex v1, vertex v2, vertex* vertex_start, vertex* vertex_end) {
+
+	int dx = v2.x - v1.x;
+	int dy = v2.y - v1.y;
+	int xInc = 1;
+	if (dx < 0) {
+		xInc = -1;
+		dx *= -1;
+	}
+
+	int D = 2 * dx - dy;
+	int dDInc = 2 * (dx - dy);
+	int dDNoInc = 2 * dx;
+
+	__m256 dPdy = _mm256_div_ps(
+		_mm256_sub_ps(v2.attributes.lump, v1.attributes.lump),
+		_mm256_set1_ps(dy)
+	);
+	vertex frag = v1;
+	int x = v1.x;
+	for (int y = v1.y; y <= v2.y; ++y) {
+
+		if (x < vertex_start[y].x && y > 0 && y < 479) {
+			vertex_start[y].x = x;
+			vertex_start[y].attributes = frag.attributes;
+		}
+
+		if (x > vertex_end[y].x && y > 0 && y < 479) {
+			vertex_end[y].x = x;
+			vertex_end[y].attributes = frag.attributes;
+		}
+
+		if (D > 0) {
+			x += xInc;
+			D += dDInc;
+		}
+		else {
+			D += dDNoInc;
+		}
+
+		frag.attributes.lump = _mm256_add_ps(frag.attributes.lump, dPdy);
+	}
+}
+
+void Engine::draw_horizontal_line_blended(vertex v1, vertex v2, int y) {
+
+	vkUtil::SwapChainFrame& _frame = swapchainFrames[frameNumber];
+
+	int x1 = std::min(_frame.width - 1, std::max(0, v1.x));
+	int x2 = std::min(_frame.width - 1, std::max(0, v2.x));
+	y = std::min(_frame.height - 1, std::max(0, y));
+	payload fragment = v1.attributes;
+	__m256 dPdx = _mm256_div_ps(
+		_mm256_sub_ps(v2.attributes.lump, v1.attributes.lump),
+		_mm256_set1_ps(x2 - x1)
+	);
+
+	for (int x = x1; x < x2; ++x) {
+
+		unsigned char* color = convert_color(fragment.data[0], fragment.data[1], fragment.data[2]);
+		int pixel = 4 * (_frame.width * y + x);
+		_frame.colorBufferData[pixel] = color[0];
+		_frame.colorBufferData[pixel + 1] = color[1];
+		_frame.colorBufferData[pixel + 2] = color[2];
+		_frame.colorBufferData[pixel + 3] = color[3];
+
+		fragment.lump = _mm256_add_ps(fragment.lump, dPdx);
+	}
+}
+
 /**
 * The swapchain must be recreated upon resize or minimization, among other cases
 */

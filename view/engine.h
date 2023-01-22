@@ -40,6 +40,14 @@ public:
 
 	void trace_steep_edge(int x1, int y1, int x2, int y2, int* x_start, int* x_end);
 
+	void draw_polygon_blended(edgeTable polygon);
+
+	void interpolate_shallow_edge(vertex v1, vertex v2, vertex* vertex_start, vertex* vertex_end);
+
+	void interpolate_steep_edge(vertex v1, vertex v2, vertex* vertex_start, vertex* vertex_end);
+
+	void draw_horizontal_line_blended(vertex v1, vertex v2, int y);
+
 	void render();
 
 private:

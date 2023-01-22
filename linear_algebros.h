@@ -35,7 +35,20 @@ typedef struct quaternion {
 } quat;
 
 typedef struct {
+	union {
+		__m256 lump;
+		float data[8];
+	};
+} payload;
+
+typedef struct {
+	int x, y;
+	payload attributes;
+} vertex;
+
+typedef struct {
 	vec4* vertices;
+	payload* payloads;
 	int vertexCount;
 } edgeTable;
 
@@ -55,7 +68,11 @@ float linalgEdgePlaneIntersectionPoint(vec4 a, vec4 b, plane p);
 
 edgeTable linalgFrustrumClipSimple(edgeTable input, frustrum f);
 
+edgeTable linalgFrustrumClip(edgeTable input, frustrum f);
+
 edgeTable linalgClipAgainstBoundary(edgeTable input, plane p);
+
+edgeTable linalgClipAgainstBoundaryWithAttributes(edgeTable input, plane p);
 
 frustrum linalgMakeViewFrustrum(float fovy, float aspect, float near, float far);
 

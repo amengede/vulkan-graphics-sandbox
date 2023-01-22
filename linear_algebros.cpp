@@ -103,6 +103,61 @@ edgeTable linalgClipAgainstBoundary(edgeTable input, plane p) {
 	return output;
 }
 
+edgeTable linalgFrustrumClip(edgeTable input, frustrum f) {
+
+	for (int i = 0; i < 6; ++i) {
+		input = linalgClipAgainstBoundaryWithAttributes(input, f.planes[i]);
+	}
+
+	return input;
+}
+
+edgeTable linalgClipAgainstBoundaryWithAttributes(edgeTable input, plane p) {
+
+	edgeTable output;
+	output.vertices = (vec4*)malloc(2 * input.vertexCount * sizeof(vec4));
+	output.payloads = (payload*)malloc(2 * input.vertexCount * sizeof(payload));
+	output.vertexCount = 0;
+
+	for (int i = 0; i < input.vertexCount; ++i) {
+		vec4 a = input.vertices[i];
+		vec4 b = input.vertices[(i + 1) % input.vertexCount];
+		vec4 c;
+		float t = linalgEdgePlaneIntersectionPoint(a, b, p);
+		c.vector = _mm_fmadd_ps(
+			_mm_set1_ps(t),
+			_mm_sub_ps(b.vector, a.vector),
+			a.vector
+		);
+
+		payload payload_a, payload_b, payload_c;
+		payload_a = input.payloads[i];
+		payload_b = input.payloads[(i + 1) % input.vertexCount];
+		payload_c.lump = _mm256_fmadd_ps(
+			_mm256_set1_ps(t),
+			_mm256_sub_ps(payload_b.lump, payload_a.lump),
+			payload_a.lump
+		);
+
+		if (!linalgPointBehindPlane(b, p)) { //if b inside of boundary
+			if (linalgPointBehindPlane(a, p)) { // if a outside of boundary
+				output.vertices[output.vertexCount] = c;
+				output.payloads[output.vertexCount++] = payload_c;
+			}
+			output.vertices[output.vertexCount] = b;
+			output.payloads[output.vertexCount++] = payload_b;
+		}
+		else if (!linalgPointBehindPlane(a, p)) { //if a is visible
+			output.vertices[output.vertexCount] = c;
+			output.payloads[output.vertexCount++] = payload_c;
+		}
+	}
+
+	free(input.vertices);
+	free(input.payloads);
+	return output;
+}
+
 /*-------- Conversions        ----------*/
 
 float linalgDeg2Rad(float angle) {
