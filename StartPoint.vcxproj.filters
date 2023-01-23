@@ -39,10 +39,10 @@
     <ClCompile Include="view\graphics_library.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Model\linear_algebros.cpp">
+    <ClCompile Include="linear_algebros.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="linear_algebros.c">
+    <ClCompile Include="config.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -93,6 +93,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="linear_algebros.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="stb_image.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

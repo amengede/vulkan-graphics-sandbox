@@ -20,6 +20,7 @@ private:
 	int trialCount = 0;
 	bool logged = false;
 	float theta = 0.0f;
+	texture tex;
 
 public:
 	App(int width, int height, bool debug);
@@ -32,4 +33,5 @@ public:
 	void clipping_test();
 	void flat_shading_test();
 	void color_blending_test();
+	void texture_test();
 };

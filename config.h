@@ -11,6 +11,8 @@
 
 #include <intrin.h>
 
+#include "stb_image.h"
+
 /**
 	Data structures used for creating buffers
 	and allocating memory

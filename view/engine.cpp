@@ -741,6 +741,155 @@ void Engine::draw_horizontal_line_blended(vertex v1, vertex v2, int y) {
 	}
 }
 
+texture Engine::convert_texture(stbi_uc* textureData, int width, int height) {
+
+	texture tex;
+	tex.width = width;
+	tex.height = height;
+	tex.r = (float*)malloc(width * height * sizeof(float));
+	tex.g = (float*)malloc(width * height * sizeof(float));
+	tex.b = (float*)malloc(width * height * sizeof(float));
+
+	for (int y = 0; y < height; ++y) {
+		for (int x = 0; x < width; ++x) {
+			tex.r[width * y + x] = (float)textureData[4 * (width * y + x)] / 255;
+			tex.g[width * y + x] = (float)textureData[4 * (width * y + x) + 1] / 255;
+			tex.b[width * y + x] = (float)textureData[4 * (width * y + x) + 2] / 255;
+		}
+	}
+
+	return tex;
+}
+
+void Engine::draw_polygon_textured(edgeTable& polygon, texture& tex) {
+
+	vertex* vertex_start = (vertex*)malloc(480 * sizeof(vertex));
+	vertex* vertex_end = (vertex*)malloc(480 * sizeof(vertex));
+	int y_min = 480;
+	int y_max = 0;
+
+	for (int i = 0; i < polygon.vertexCount; ++i) {
+
+		vec4 vertex = polygon.vertices[i];
+
+		if (vertex.data[1] < y_min) {
+			y_min = std::max(0, (int)vertex.data[1]);
+		}
+
+		if (vertex.data[1] > y_max) {
+			y_max = std::min(479, (int)vertex.data[1]);
+		}
+	}
+
+	for (int y = y_min; y <= y_max; ++y) {
+		vertex_start[y].x = 640;
+		vertex_end[y].x = 0;
+	}
+
+	for (int j = 0; j < polygon.vertexCount; ++j) {
+
+		vertex v1;
+		v1.x = (int)polygon.vertices[j].data[0];
+		v1.y = (int)polygon.vertices[j].data[1];
+		v1.attributes = polygon.payloads[j];
+
+		vertex v2;
+		int k = (j + 1) % polygon.vertexCount;
+		v2.x = (int)polygon.vertices[k].data[0];
+		v2.y = (int)polygon.vertices[k].data[1];
+		v2.attributes = polygon.payloads[k];
+
+		if (abs(v2.x - v1.x) < abs(v2.y - v1.y)) {
+			if (v1.y < v2.y) {
+				interpolate_steep_edge(v1, v2, vertex_start, vertex_end);
+			}
+			else {
+				interpolate_steep_edge(v2, v1, vertex_start, vertex_end);
+			}
+		}
+		else {
+			if (v1.x < v2.x) {
+				interpolate_shallow_edge(v1, v2, vertex_start, vertex_end);
+			}
+			else {
+				interpolate_shallow_edge(v2, v1, vertex_start, vertex_end);
+			}
+		}
+	}
+
+	for (int y = y_min; y <= y_max; ++y) {
+		draw_horizontal_line_textured(vertex_start[y], vertex_end[y], y, tex);
+	}
+
+	free(vertex_start);
+	free(vertex_end);
+}
+
+void Engine::draw_horizontal_line_textured(vertex v1, vertex v2, int y, texture& tex) {
+
+	vkUtil::SwapChainFrame& _frame = swapchainFrames[frameNumber];
+
+	int x1 = std::min(_frame.width - 1, std::max(0, v1.x));
+	int x2 = std::min(_frame.width - 1, std::max(0, v2.x));
+	y = std::min(_frame.height - 1, std::max(0, y));
+	payload fragment = v1.attributes;
+	__m256 dPdx = _mm256_div_ps(
+		_mm256_sub_ps(v2.attributes.lump, v1.attributes.lump),
+		_mm256_set1_ps(x2 - x1)
+	);
+
+	for (int x = x1; x < x2; ++x) {
+
+		int u_left = std::min(tex.width - 1, std::max(0, (int)(tex.width * fragment.data[3])));
+		int u_right = std::min(tex.width - 1, std::max(0, u_left + 1));
+		float frac_u = tex.width * fragment.data[3] - u_left;
+		float left = 1.0f - frac_u;
+		float right = frac_u;
+
+		int v_top = std::min(tex.height - 1, std::max(0, (int)(tex.height * fragment.data[4])));
+		int v_bottom = std::min(tex.height - 1, std::max(0, v_top + 1));
+		float frac_v = tex.height * fragment.data[4] - v_top;
+		float top = 1.0f - frac_v;
+		float bottom = frac_v;
+
+		float r = fragment.data[0] * (
+			top * (
+				left * tex.r[v_top * tex.width + u_left] + right * tex.r[v_top * tex.width + u_right]
+				)
+			+ bottom * (
+				left * tex.r[v_bottom * tex.width + u_left] + right * tex.r[v_bottom * tex.width + u_right]
+				)
+		);
+
+		float g = fragment.data[1] * (
+			top * (
+				left * tex.g[v_top * tex.width + u_left] + right * tex.g[v_top * tex.width + u_right]
+				)
+			+ bottom * (
+				left * tex.g[v_bottom * tex.width + u_left] + right * tex.g[v_bottom * tex.width + u_right]
+				)
+			);
+
+		float b = fragment.data[2] * (
+			top * (
+				left * tex.b[v_top * tex.width + u_left] + right * tex.b[v_top * tex.width + u_right]
+				)
+			+ bottom * (
+				left * tex.b[v_bottom * tex.width + u_left] + right * tex.b[v_bottom * tex.width + u_right]
+				)
+			);
+
+		unsigned char* color = convert_color(r, g, b);
+		int pixel = 4 * (_frame.width * y + x);
+		_frame.colorBufferData[pixel] = color[0];
+		_frame.colorBufferData[pixel + 1] = color[1];
+		_frame.colorBufferData[pixel + 2] = color[2];
+		_frame.colorBufferData[pixel + 3] = color[3];
+
+		fragment.lump = _mm256_add_ps(fragment.lump, dPdx);
+	}
+}
+
 /**
 * The swapchain must be recreated upon resize or minimization, among other cases
 */

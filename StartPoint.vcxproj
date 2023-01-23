@@ -151,6 +151,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="config.cpp" />
     <ClCompile Include="control\app.cpp" />
     <ClCompile Include="control\logging.cpp" />
     <ClCompile Include="linear_algebros.cpp" />
@@ -165,6 +166,7 @@
     <ClInclude Include="control\app.h" />
     <ClInclude Include="linear_algebros.h" />
     <ClInclude Include="Model\linear_algebros.h" />
+    <ClInclude Include="stb_image.h" />
     <ClInclude Include="view\graphics_library.h" />
     <ClInclude Include="view\vkImage\image.h" />
     <ClInclude Include="view\vkInit\commands.h" />

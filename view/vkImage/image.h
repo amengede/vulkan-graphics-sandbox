@@ -1,6 +1,13 @@
 #pragma once
 #include "../../config.h"
 
+typedef struct {
+	float* r;
+	float* g;
+	float* b;
+	int width, height;
+} texture;
+
 namespace vkImage {
 
 	/**

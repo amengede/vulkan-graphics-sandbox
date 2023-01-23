@@ -48,6 +48,12 @@ public:
 
 	void draw_horizontal_line_blended(vertex v1, vertex v2, int y);
 
+	texture convert_texture(stbi_uc* textureData, int width, int height);
+
+	void draw_polygon_textured(edgeTable& polygon, texture& tex);
+
+	void draw_horizontal_line_textured(vertex v1, vertex v2, int y, texture& tex);
+
 	void render();
 
 private:
